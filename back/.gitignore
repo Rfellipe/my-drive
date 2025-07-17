@@ -1,0 +1,4 @@
+cmds/**
+.env
+go.sum
+my-drive*
