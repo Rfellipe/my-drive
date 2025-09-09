@@ -1,18 +1,25 @@
 package handlers
 
 import (
-	"fmt"
-	"my-drive/dtos"
+	_ "fmt"
 	"my-drive/lib"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
+type UserForm struct {
+	Email string `json:"email" binding:"required"`
+	Pass  string `json:"pass" binding:"required"`
+}
+
 func RegistrationHandler(ctx *gin.Context) {
 	db := lib.DB.Connection
-	var json dtos.UserForm
+	var json UserForm
 
 	if err := ctx.Bind(&json); err != nil {
 		lib.RespondError(ctx, http.StatusBadRequest, "Invalid Input")
@@ -36,8 +43,8 @@ func RegistrationHandler(ctx *gin.Context) {
 
 func LoginHandler(ctx *gin.Context) {
 	db := lib.DB.Connection
-	var userInfo dtos.UserInfo
-	var json dtos.UserForm
+	var userInfo lib.UserInfo
+	var json UserForm
 
 	if err := ctx.Bind(&json); err != nil {
 		lib.RespondError(ctx, http.StatusBadRequest, "Invalid Input")
@@ -82,8 +89,63 @@ func LoginHandler(ctx *gin.Context) {
 
 	db.Exec(`UPDATE users SET login_attempts=$1 WHERE id=$2`, 0, userInfo.Id)
 
-	token, exp := lib.GenerateJWT(userInfo)
+	token, _ := lib.GenerateJWT(userInfo)
 	ctx.Header("access_token", token)
-	ctx.Header("expires", fmt.Sprintf("%d", exp))
+	// ctx.Header("expires", fmt.Sprintf("%d", exp))
 	lib.Responder(ctx, http.StatusOK, "Login successful", nil)
 }
+
+func JWTAuthorizeMiddleware() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		authHeader := ctx.GetHeader("Authorization")
+		if authHeader == "" {
+			lib.RespondError(ctx, http.StatusUnauthorized, "Missing Authorization header")
+			ctx.Abort()
+			return
+		}
+
+		const bearerPrefix = "Bearer "
+		if !strings.HasPrefix(authHeader, bearerPrefix) {
+			lib.RespondError(ctx, http.StatusUnauthorized, "Invalid Authorization header format")
+			ctx.Abort()
+			return
+		}
+
+		tokenString := strings.TrimPrefix(authHeader, bearerPrefix)
+
+		claims, err := lib.ValidateJWT(tokenString)
+		if err != nil {
+			lib.RespondError(ctx, http.StatusUnauthorized, "Invalid token")
+			ctx.Abort()
+			return
+		}
+
+		exp, err := claims.Claims.GetExpirationTime()
+		if err != nil || exp == nil || exp.Time.Before(time.Now()) {
+			lib.RespondError(ctx, http.StatusUnauthorized, "Token expired")
+			ctx.Abort()
+			return
+		}
+
+		sub, ok := claims.Claims.(jwt.MapClaims)["sub"].(map[string]interface{})
+		if !ok {
+			lib.RespondError(ctx, http.StatusUnauthorized, "Invalid subject claim")
+			ctx.Abort()
+			return
+		}
+
+		userID, _ := sub["id"].(string)
+		email, _ := sub["email"].(string)
+		status, _ := sub["status"].(string)
+		loginAttempts, _ := sub["loginAttempts"].(float64) 
+
+		ctx.Set("userId", userID)
+		ctx.Set("userEmail", email)
+		ctx.Set("userStatus", status)
+		ctx.Set("userLoginAttempts", int(loginAttempts))
+		ctx.Set("claims", claims.Claims) 
+
+		ctx.Next()
+	}
+}
+

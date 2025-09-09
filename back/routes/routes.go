@@ -1,7 +1,7 @@
 package routes
 
 import (
-	_ "net/http"
+	"net/http"
 	"github.com/gin-gonic/gin"
 	"my-drive/handlers"
 )
@@ -11,10 +11,32 @@ func Auth(router *gin.Engine) {
 	router.POST("/auth/login", handlers.LoginHandler)
 }
 
-// func fileRoutes(router *gin.Engine) {
-// 	router.GET("/file/upload", func(ctx *gin.Context) {
-// 		ctx.JSON(http.StatusOK, gin.H{
-// 			"req": "ok",
-// 		})
-// 	})
-// }
+func File(router *gin.Engine) {
+	authorize := router.Group("/files")
+
+	authorize.Use(handlers.JWTAuthorizeMiddleware())
+
+	// Upload file
+	authorize.POST("/upload", handlers.HandleFileUpload)
+
+	// Download file
+	authorize.GET("/:id", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{
+			"req": "ok",
+		})
+	})
+
+	// Delete file
+	authorize.DELETE("/:id", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{
+			"req": "ok",
+		})
+	})
+
+	// List files
+	authorize.GET("/", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{
+			"req": "ok",
+		})
+	})
+}

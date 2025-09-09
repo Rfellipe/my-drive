@@ -42,5 +42,6 @@ func main() {
 	// Start router
 	r := gin.Default()
 	routes.Auth(r) // Start authentication routes
+	routes.File(r) // Start file routes
 	r.Run(":8080") // Listen and Server in 0.0.0.0:8080
 }
