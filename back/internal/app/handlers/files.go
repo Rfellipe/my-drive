@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"fmt"
-	"my-drive/lib"
+	"my-drive/internal/pkg/lib"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

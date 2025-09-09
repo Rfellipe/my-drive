@@ -7,14 +7,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type UserInfo struct {
+type UserSubject struct {
 	Id             string `json:"id"`
 	Email          string `json:"email"`
 	Status         string `json:"status"`
 	Login_attempts int    `json:"loginAttempts"`
 }
 
-func GenerateJWT(userInfo UserInfo) (string, int64) {
+func GenerateJWT(userInfo UserSubject) (string, int64) {
 	var (
 		key []byte
 		tk  *jwt.Token

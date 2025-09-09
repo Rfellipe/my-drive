@@ -2,13 +2,11 @@ package handlers
 
 import (
 	_ "fmt"
-	"my-drive/lib"
+	"my-drive/internal/pkg/lib"
+	"my-drive/internal/app/db"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -18,7 +16,7 @@ type UserForm struct {
 }
 
 func RegistrationHandler(ctx *gin.Context) {
-	db := lib.DB.Connection
+	database := db.DB.Connection
 	var json UserForm
 
 	if err := ctx.Bind(&json); err != nil {
@@ -32,7 +30,7 @@ func RegistrationHandler(ctx *gin.Context) {
 		return
 	}
 
-	_, err = db.Exec(`INSERT INTO users(email, password) VALUES($1, $2)`, json.Email, hashedPass)
+	_, err = database.Exec(`INSERT INTO users(email, password) VALUES($1, $2)`, json.Email, hashedPass)
 	if err != nil {
 		lib.RespondError(ctx, http.StatusInternalServerError, "Insert error, account not created")
 		return
@@ -42,8 +40,8 @@ func RegistrationHandler(ctx *gin.Context) {
 }
 
 func LoginHandler(ctx *gin.Context) {
-	db := lib.DB.Connection
-	var userInfo lib.UserInfo
+	database := db.DB.Connection
+	var userInfo lib.UserSubject
 	var json UserForm
 
 	if err := ctx.Bind(&json); err != nil {
@@ -54,7 +52,7 @@ func LoginHandler(ctx *gin.Context) {
 	hashedPassword := "$2a$12$VSZFnXJazJ.2WE1hVrydMu6sYUPWQLfdlZs5ivFVPzk4BDVTOLQAy" // Dummy bcrypt hash
 	userExists := true
 
-	err := db.QueryRow(
+	err := database.QueryRow(
 		`SELECT id, email, password, status, login_attempts FROM users WHERE email=$1`,
 		json.Email,
 	).Scan(
@@ -82,12 +80,12 @@ func LoginHandler(ctx *gin.Context) {
 	}
 
 	if bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(json.Pass)) != nil {
-		_, _ = db.Exec(`UPDATE users SET login_attempts=$1 WHERE id=$2`, userInfo.Login_attempts+1, userInfo.Id)
+		_, _ = database.Exec(`UPDATE users SET login_attempts=$1 WHERE id=$2`, userInfo.Login_attempts+1, userInfo.Id)
 		lib.Responder(ctx, http.StatusUnauthorized, "Invalid credentials", nil)
 		return
 	}
 
-	db.Exec(`UPDATE users SET login_attempts=$1 WHERE id=$2`, 0, userInfo.Id)
+	database.Exec(`UPDATE users SET login_attempts=$1 WHERE id=$2`, 0, userInfo.Id)
 
 	token, _ := lib.GenerateJWT(userInfo)
 	ctx.Header("access_token", token)
@@ -95,57 +93,5 @@ func LoginHandler(ctx *gin.Context) {
 	lib.Responder(ctx, http.StatusOK, "Login successful", nil)
 }
 
-func JWTAuthorizeMiddleware() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		authHeader := ctx.GetHeader("Authorization")
-		if authHeader == "" {
-			lib.RespondError(ctx, http.StatusUnauthorized, "Missing Authorization header")
-			ctx.Abort()
-			return
-		}
 
-		const bearerPrefix = "Bearer "
-		if !strings.HasPrefix(authHeader, bearerPrefix) {
-			lib.RespondError(ctx, http.StatusUnauthorized, "Invalid Authorization header format")
-			ctx.Abort()
-			return
-		}
-
-		tokenString := strings.TrimPrefix(authHeader, bearerPrefix)
-
-		claims, err := lib.ValidateJWT(tokenString)
-		if err != nil {
-			lib.RespondError(ctx, http.StatusUnauthorized, "Invalid token")
-			ctx.Abort()
-			return
-		}
-
-		exp, err := claims.Claims.GetExpirationTime()
-		if err != nil || exp == nil || exp.Time.Before(time.Now()) {
-			lib.RespondError(ctx, http.StatusUnauthorized, "Token expired")
-			ctx.Abort()
-			return
-		}
-
-		sub, ok := claims.Claims.(jwt.MapClaims)["sub"].(map[string]interface{})
-		if !ok {
-			lib.RespondError(ctx, http.StatusUnauthorized, "Invalid subject claim")
-			ctx.Abort()
-			return
-		}
-
-		userID, _ := sub["id"].(string)
-		email, _ := sub["email"].(string)
-		status, _ := sub["status"].(string)
-		loginAttempts, _ := sub["loginAttempts"].(float64) 
-
-		ctx.Set("userId", userID)
-		ctx.Set("userEmail", email)
-		ctx.Set("userStatus", status)
-		ctx.Set("userLoginAttempts", int(loginAttempts))
-		ctx.Set("claims", claims.Claims) 
-
-		ctx.Next()
-	}
-}
 

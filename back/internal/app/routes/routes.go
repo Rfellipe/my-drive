@@ -3,7 +3,8 @@ package routes
 import (
 	"net/http"
 	"github.com/gin-gonic/gin"
-	"my-drive/handlers"
+	"my-drive/internal/app/handlers"
+	"my-drive/internal/app/middleware"
 )
 
 func Auth(router *gin.Engine) {
@@ -14,7 +15,7 @@ func Auth(router *gin.Engine) {
 func File(router *gin.Engine) {
 	authorize := router.Group("/files")
 
-	authorize.Use(handlers.JWTAuthorizeMiddleware())
+	authorize.Use(middleware.JWTAuthorizeMiddleware())
 
 	// Upload file
 	authorize.POST("/upload", handlers.HandleFileUpload)
