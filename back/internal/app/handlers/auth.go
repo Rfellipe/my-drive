@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	_ "fmt"
-	"my-drive/internal/pkg/lib"
 	"my-drive/internal/app/db"
+	"my-drive/internal/pkg/lib"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -30,9 +32,26 @@ func RegistrationHandler(ctx *gin.Context) {
 		return
 	}
 
-	_, err = database.Exec(`INSERT INTO users(email, password) VALUES($1, $2)`, json.Email, hashedPass)
+	userid := ""
+	err = database.QueryRow(`INSERT INTO users(email, password) VALUES($1, $2) RETURNING id`, json.Email, hashedPass).Scan(&userid) 
 	if err != nil {
+		fmt.Printf("%s", err)
 		lib.RespondError(ctx, http.StatusInternalServerError, "Insert error, account not created")
+		return
+	}
+
+	_, err = database.Exec(`INSERT INTO nodes(name, type, owner) VALUES ($1, $2, $3)`, userid, "dir", userid)
+	if err != nil {
+		fmt.Printf("%s", err)
+		lib.RespondError(ctx, http.StatusInternalServerError, "Insert error, your dir was not created")
+		database.Exec(`DELETER FROM users WHERE id = $1`, userid)
+		return
+	}
+
+	err = os.Mkdir(fmt.Sprintf("%s/%s/", os.Getenv("DRIVE_ROOT"), userid), os.ModePerm)
+	if err != nil {
+		fmt.Printf("%s", err)
+		lib.RespondError(ctx, http.StatusInternalServerError, "your dir was not created")
 		return
 	}
 
