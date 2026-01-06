@@ -1,9 +1,11 @@
 package lib
 
 import (
+	"errors"
 	"os"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -11,6 +13,7 @@ type UserSubject struct {
 	Id             string `json:"id"`
 	Email          string `json:"email"`
 	Status         string `json:"status"`
+	RootDirId      string `json:"rootDirId"`
 	Login_attempts int    `json:"loginAttempts"`
 }
 
@@ -31,14 +34,10 @@ func GenerateJWT(userInfo UserSubject) (string, int64) {
 			"iat": now,
 			"exp": later,
 			"sub": userInfo,
-			// "id": userInfo.Id,
-			// "email:": userInfo.Email,
-			// "status": userInfo.Status,
-			// "login_attempts": userInfo.Login_attempts,
 		},
 	)
 	s, _ = tk.SignedString(key)
-	
+
 	return s, later
 }
 
@@ -50,4 +49,30 @@ func ValidateJWT(s string) (*jwt.Token, error) {
 		}
 		return key, nil
 	})
+}
+
+func RetrieveJWTClaims(ctx *gin.Context) (UserSubject, error) {
+	var claims UserSubject
+
+	id, _ := ctx.Get("userId")
+	email, _ := ctx.Get("userEmail")
+	status, _ := ctx.Get("userStatus")
+	rootDirId, _ := ctx.Get("userRootDir")
+	loginAttempts, _ := ctx.Get("userLoginAttempts")
+
+	if id == nil ||
+		email == nil ||
+		status == nil ||
+		rootDirId == nil ||
+		loginAttempts == nil {
+		return claims, errors.New("Missing info on token")
+	}
+
+	claims.Id = id.(string)
+	claims.Email = email.(string)
+	claims.Status = status.(string)
+	claims.RootDirId = rootDirId.(string)
+	claims.Login_attempts = loginAttempts.(int)
+
+	return claims, nil
 }

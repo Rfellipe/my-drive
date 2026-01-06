@@ -53,13 +53,15 @@ func JWTAuthorizeMiddleware() gin.HandlerFunc {
 		userID, _ := sub["id"].(string)
 		email, _ := sub["email"].(string)
 		status, _ := sub["status"].(string)
-		loginAttempts, _ := sub["loginAttempts"].(float64) 
+		rootDir, _ := sub["rootDirId"].(string)
+		loginAttempts, _ := sub["loginAttempts"].(float64)
 
 		ctx.Set("userId", userID)
 		ctx.Set("userEmail", email)
 		ctx.Set("userStatus", status)
+		ctx.Set("userRootDir", rootDir)
 		ctx.Set("userLoginAttempts", int(loginAttempts))
-		ctx.Set("claims", claims.Claims) 
+		ctx.Set("claims", claims.Claims)
 
 		ctx.Next()
 	}
