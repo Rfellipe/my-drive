@@ -5,7 +5,7 @@ import (
 	"my-drive/internal/app/db"
 	"my-drive/internal/pkg/lib"
 	"net/http"
-	"os"
+	// "os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -49,7 +49,7 @@ func RegistrationHandler(ctx *gin.Context) {
 		return
 	}
 
-	err = os.Mkdir(fmt.Sprintf("%s/%s/", os.Getenv("DRIVE_ROOT"), userid), os.ModePerm)
+	err = lib.CreateUserDir(userid)
 	if err != nil {
 		fmt.Printf("%s", err)
 		lib.RespondError(ctx, http.StatusInternalServerError, "your dir was not created")
@@ -82,7 +82,7 @@ func LoginHandler(ctx *gin.Context) {
 			  n.id as root_dir
 			FROM
 			  users u
-			LEFT JOIN nodes n on n.name::uuid = u.id
+			LEFT JOIN nodes n on n.name = u.id::text
 			WHERE u.email = $1;`,
 		json.Email,
 	).Scan(

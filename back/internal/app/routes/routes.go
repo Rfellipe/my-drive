@@ -57,5 +57,5 @@ func Dir(router *gin.Engine) {
 	authorize.POST("/", handlers.CreateDirectory)
 
 	// Delete folder
-	authorize.DELETE("/:id", func(ctx *gin.Context) {})
+	authorize.DELETE("/:id", handlers.DeleteDirectory)
 }

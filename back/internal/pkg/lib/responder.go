@@ -16,7 +16,7 @@ func Responder(ctx *gin.Context, code int, message string, data any) {
 	})
 }
 
+// TODO: Make this more dry when calling
 func RespondError(ctx *gin.Context, code int, message string) {
 	Responder(ctx, code, message, nil)
 }
-

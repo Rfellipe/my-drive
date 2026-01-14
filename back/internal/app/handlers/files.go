@@ -11,7 +11,6 @@ import (
 )
 
 func HandleFileUpload(ctx *gin.Context) {
-	// Multipart form
 	database := db.DB.Connection
 	form, _ := ctx.MultipartForm()
 	files := form.File["files"]

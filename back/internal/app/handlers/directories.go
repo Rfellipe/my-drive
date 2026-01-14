@@ -10,17 +10,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type DirForm struct {
-	Name     string `json:"name" binding:"required"`
-	ParentId string `json:"parent"`
-}
-
 type Directory struct {
 	ID string `uri:"id" binding:"required,uuid"`
 }
 
+type DirDel struct {
+	Node lib.FsNode `json:"node"`
+	Soft bool       `json:"soft"`
+}
+
 func CreateDirectory(ctx *gin.Context) {
-	var json DirForm
+	var json lib.FsNode
 
 	claims, err := lib.RetrieveJWTClaims(ctx)
 	if err != nil {
@@ -29,13 +29,13 @@ func CreateDirectory(ctx *gin.Context) {
 		return
 	}
 
-	if err := ctx.ShouldBind(&json); err != nil {
+	if err := ctx.ShouldBindJSON(&json); err != nil {
 		lib.RespondError(ctx, http.StatusBadRequest, "Invalid input")
 		return
 	}
 
-	fmt.Println("ParentId:", json.ParentId)
-	if err := lib.CreateDir(claims, json.Name, json.ParentId); err != nil {
+	// TODO: Make a better way to handle this error
+	if err := lib.CreateDir(claims, json); err != nil {
 		lib.RespondError(ctx, http.StatusInternalServerError, "ill need to handle it better")
 		return
 	}
@@ -46,7 +46,7 @@ func CreateDirectory(ctx *gin.Context) {
 func FindDirectory(ctx *gin.Context) {
 	database := db.DB.Connection
 	var dir Directory
-	var dirFiles []lib.FileInfo
+	var dirFiles []lib.FsNode
 
 	if err := ctx.ShouldBindUri(&dir); err != nil {
 		lib.RespondError(ctx, http.StatusBadRequest, "Invalid input")
@@ -79,7 +79,7 @@ func FindDirectory(ctx *gin.Context) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var file lib.FileInfo
+		var file lib.FsNode
 		if err := rows.Scan(&file.Name, &file.Type, &file.Size, &file.Created_at, &file.Updated_at); err != nil {
 			fmt.Printf("%s", err)
 			lib.RespondError(ctx, http.StatusInternalServerError, "Error reading files")
@@ -88,6 +88,42 @@ func FindDirectory(ctx *gin.Context) {
 
 		dirFiles = append(dirFiles, file)
 	}
+}
 
-	fmt.Println(dirFiles)
+func DeleteDirectory(ctx *gin.Context) {
+	var json DirDel
+	var dir Directory
+
+	if err := ctx.ShouldBindJSON(&json); err != nil {
+		lib.RespondError(ctx, http.StatusBadRequest, "Invalid input")
+		return
+	}
+
+	if err := ctx.ShouldBindUri(&dir); err != nil {
+		lib.RespondError(ctx, http.StatusBadRequest, "Invalid input")
+		return
+	}
+
+	json.Node.ID = &dir.ID
+
+	claims, err := lib.RetrieveJWTClaims(ctx)
+	if err != nil {
+		log.Println("Error getting user claims", err)
+		lib.RespondError(ctx, http.StatusForbidden, "Claims error")
+		return
+	}
+
+	if json.Soft {
+		if deleteErr := lib.SoftDeleteDir(claims, json.Node); deleteErr != nil {
+			lib.RespondError(ctx, http.StatusInternalServerError, "Error deleting directory")
+			return
+		}
+	} else {
+		if deleteErr := lib.DeleteDir(claims, json.Node); deleteErr != nil {
+			lib.RespondError(ctx, http.StatusInternalServerError, "Error deleting directory")
+			return
+		}
+	}
+
+	lib.Responder(ctx, http.StatusOK, "Deleted Directory Successfully", nil)
 }
