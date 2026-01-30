@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"my-drive/internal/app/db"
+	"my-drive/internal/app/models"
 	"os"
 	"time"
 
@@ -25,18 +26,13 @@ var FsTypeName = map[FsTypes]string{
 	File:      "file",
 }
 
-func (ss FsTypes) String() string {
-	return FsTypeName[ss]
+type paths struct {
+	old string
+	new string
 }
 
-type FsNode struct {
-	ID         *string `json:"id"`
-	Name       string  `json:"name" binding:"required"`
-	Type       string  `json:"type" binding:"required"`
-	Size       *int    `json:"size"`
-	ParentId   *string `json:"parentId"`
-	Created_at *string `json:"created_at"`
-	Updated_at *string `json:"updated_at"`
+func (ss FsTypes) String() string {
+	return FsTypeName[ss]
 }
 
 func getUserDir(userId string) string {
@@ -68,7 +64,7 @@ func CreateUserDir(userId string) error {
 	return nil
 }
 
-func CreateDir(userClaims UserSubject, node FsNode) error {
+func CreateDir(userClaims UserSubject, node models.FsNode) error {
 	database := db.DB.Connection
 	var fullPath string = fmt.Sprintf("%s/%s", getUserDir(userClaims.Id), node.Name)
 
@@ -107,7 +103,7 @@ func CreateDir(userClaims UserSubject, node FsNode) error {
 	return nil
 }
 
-func SoftDeleteDir(userClaims UserSubject, node FsNode) error {
+func SoftDeleteDir(userClaims UserSubject, node models.FsNode) error {
 	database := db.DB.Connection
 	ctx, cancel := context.WithCancel(db.DB.RootContext)
 
@@ -171,10 +167,12 @@ func SoftDeleteDir(userClaims UserSubject, node FsNode) error {
 	return nil
 }
 
-func DeleteDir(userClaims UserSubject, node FsNode) error {
+func DeleteDir(userClaims UserSubject, node models.FsNode) error {
 	database := db.DB.Connection
 	ctx, cancel := context.WithCancel(db.DB.RootContext)
-	var filePath string = fmt.Sprintf("%s/%s/%s", getUserDir(userClaims.Id), "recycle_bin", node.Name)
+	var filePath string = fmt.Sprintf(
+		"%s/%s/%s", getUserDir(userClaims.Id), "recycle_bin", node.Name,
+	)
 
 	tx, err := database.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
@@ -205,6 +203,74 @@ func DeleteDir(userClaims UserSubject, node FsNode) error {
 
 	cancel()
 	return nil
+}
+
+func Rename(userClaims UserSubject, node models.FsNode, oldPath string, newPath string) error {
+	database := db.DB.Connection
+	path := paths{
+		old: fmt.Sprintf(`%s/%s`, getUserDir(userClaims.Id), oldPath),
+		new: fmt.Sprintf(`%s/%s`, getUserDir(userClaims.Id), newPath),
+	}
+	parentId := func(parentId *string) *string {
+		if parentId == nil || *parentId == "" {
+			return nil
+		} else {
+			return parentId
+		}
+	}
+
+	fmt.Printf("nodeId: %s\nnewPath: %s\nparentId: %s\n", *node.ID, newPath, parentId(node.ParentId))
+	_, err := database.Exec(`SELECT update_node($1, $2, $3);`,
+		*node.ID, newPath, parentId(node.ParentId),
+	)
+	if err != nil {
+		log.Printf("Error while updating node table: %s", err)
+		return err
+	}
+
+	if mvErr := os.Rename(path.old, path.new); mvErr != nil {
+		log.Printf("Error updating node: %s", mvErr)
+		return err
+	}
+
+	return nil
+}
+
+func ListFiles(userClaims UserSubject, dirId string) ([]models.FsNode, error) {
+	database := db.DB.Connection
+
+	rows, queryErr := database.Query(`
+		SELECT 
+			id, name, type, size, parent_id, created_at, updated_at
+		FROM
+			nodes
+		WHERE
+			id = $1 OR parent_id = $1`,
+		dirId,
+	)
+	if queryErr != nil {
+		return nil, queryErr
+	}
+	defer rows.Close()
+
+	var nodes []models.FsNode
+	for rows.Next() {
+		var node models.FsNode
+		if rowErr := rows.Scan(
+			&node.ID, &node.Name, &node.Type,
+			&node.Size, &node.ParentId, &node.Created_at,
+			&node.Updated_at,
+		); rowErr != nil {
+			return nil, rowErr
+		}
+
+		nodes = append(nodes, node)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return nil, rowsErr
+	}
+
+	return nodes, nil
 }
 
 func UploadFile() error {

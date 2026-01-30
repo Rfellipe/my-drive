@@ -12,6 +12,7 @@ func Auth(router *gin.Engine) {
 	router.POST("/auth/login", handlers.LoginHandler)
 }
 
+// TODO: Add custom middleware to files routes
 func File(router *gin.Engine) {
 	authorize := router.Group("/files")
 
@@ -42,16 +43,17 @@ func File(router *gin.Engine) {
 	})
 }
 
+// TODO: Add custom middleware to directory routes
 func Dir(router *gin.Engine) {
 	authorize := router.Group("/dir")
 
 	authorize.Use(middleware.JWTAuthorizeMiddleware())
 
 	// Get folder
-	authorize.GET("/:id", handlers.FindDirectory)
+	authorize.GET("/:id", handlers.ListDirectoryFile)
 
 	// Update folder
-	authorize.PUT("/:id", func(ctx *gin.Context) {})
+	authorize.PUT("/:id", handlers.UpdateDirectory)
 
 	// Create folder
 	authorize.POST("/", handlers.CreateDirectory)
